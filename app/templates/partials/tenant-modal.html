@@ -1,0 +1,83 @@
+<div
+  class="modalback"
+  id="tenantModal"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="modalTitle"
+>
+  <form class="modal" id="tenantForm">
+    <h2 id="modalTitle">创建租户</h2>
+    <p>每个租户对应一张牌桌，版本和手牌相互独立。</p>
+    <label for="tenantId">租户 ID</label
+    ><input
+      id="tenantId"
+      placeholder="例如 100001"
+      required
+      maxlength="32"
+      pattern="[0-9]{1,32}"
+      autocomplete="off"
+    />
+    <div class="form-row">
+      <div>
+        <label for="tenantVersion">当前版本</label
+        ><input
+          id="tenantVersion"
+          type="number"
+          min="1"
+          max="2147483646"
+          step="1"
+          value="1"
+          required
+        />
+      </div>
+      <div>
+        <label for="tenantTimeout">超时（秒）</label
+        ><input
+          id="tenantTimeout"
+          type="number"
+          min="10"
+          max="3600"
+          step="1"
+          value="180"
+          required
+        />
+      </div>
+    </div>
+    <div class="fieldhint">
+      版本可向前调整，不能回退或复用；调整后等待新局，保留历史。
+    </div>
+    <label for="tenantMemo">备注信息</label
+    ><textarea
+      id="tenantMemo"
+      placeholder="填写联系人、用途或其他信息"
+      rows="3"
+      maxlength="300"
+    ></textarea
+    ><label class="switchlabel"
+      ><input id="tenantEnabled" type="checkbox" checked />启用租户</label
+    >
+    <div class="formerror" id="formError" role="alert"></div>
+    <div class="actions">
+      <button type="button" class="btn" data-close>取消</button
+      ><button class="btn primary" type="submit" id="tenantSave">
+        保存租户
+      </button>
+    </div>
+  </form>
+</div>
+<div
+  class="modalback"
+  id="deviceModal"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="deviceTitle"
+>
+  <div class="modal">
+    <h2 id="deviceTitle">客户端</h2>
+    <p>
+      客户端首次连接自动登记，最多7个。失步设备仅可在离线且等待新局时移除，再于发牌前重新连接。
+    </p>
+    <div id="managedDevices" class="device-management"></div>
+    <div class="actions"><button class="btn" data-close>关闭</button></div>
+  </div>
+</div>

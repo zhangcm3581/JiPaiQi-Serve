@@ -1,0 +1,47 @@
+<aside>
+  <div class="sidebar-heading">
+    <div class="sidebar-top">
+      <button
+        id="sidebarToggle"
+        class="sidebar-toggle"
+        aria-label="隐藏菜单栏"
+        aria-expanded="true"
+        title="隐藏菜单栏"
+      >
+        <svg viewBox="0 0 24 24">
+          <rect x="3" y="4" width="18" height="16" rx="3" />
+          <path d="M9 4v16" />
+        </svg>
+      </button>
+    </div>
+    <a class="brand" href="/"
+      ><div class="brandmark">J.</div>
+      <div><strong>JiPaiQi</strong><small>ADMIN CONSOLE</small></div></a
+    >
+  </div>
+  <div class="navlabel">工作空间</div>
+  <nav>
+    <a href="/"
+      ><svg><use href="#grid" /></svg>总览</a
+    ><a href="/live"
+      ><svg><use href="#pulse" /></svg>实时上报<span
+        class="navcount"
+        id="navCount"
+        >0</span
+      ></a
+    ><a href="/tenants"
+      ><svg><use href="#users" /></svg>租户管理</a
+    ><a href="/history"
+      ><svg><use href="#clock" /></svg>版本记录</a
+    >
+  </nav>
+  <div class="sidebottom">
+    <div class="connection" id="connection">
+      <span class="dot"></span><span id="connectionLabel">正在连接服务端</span>
+    </div>
+    <div class="profile">
+      <span class="avatar">AD</span>
+      <div>本地控制台<small>无需登录 · 直接操作</small></div>
+    </div>
+  </div>
+</aside>

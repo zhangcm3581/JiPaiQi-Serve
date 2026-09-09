@@ -1,0 +1,38 @@
+{% extends 'base.html' %}{% block content %}
+<div class="pagehead">
+  <div>
+    <h1>租户管理</h1>
+    <p>独立管理每张牌桌的版本、备注和客户端。</p>
+  </div>
+  <button class="btn primary" data-create>
+    <svg><use href="#plus" /></svg>创建租户
+  </button>
+</div>
+<div class="workspace-heading">
+  <h2 id="tenantCountLabel">全部租户</h2>
+  <input
+    class="search"
+    id="search"
+    placeholder="搜索租户 ID 或备注"
+    aria-label="搜索租户"
+  />
+</div>
+<div class="panel tablewrap">
+  <table>
+    <thead>
+      <tr>
+        <th>租户 ID</th>
+        <th>备注信息</th>
+        <th>当前版本</th>
+        <th>在线客户端</th>
+        <th>状态</th>
+        <th style="text-align: right">操作</th>
+      </tr>
+    </thead>
+    <tbody id="tenantRows"></tbody>
+  </table>
+  <div class="tablefoot">
+    <span>每个租户独立维护版本与手牌数据</span><span id="rowCount"></span>
+  </div>
+</div>
+{% endblock %}

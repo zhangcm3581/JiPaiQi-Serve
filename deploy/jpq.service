@@ -1,0 +1,24 @@
+[Unit]
+Description=JiPaiQi hand collection and admin
+After=network.target
+
+[Service]
+Type=simple
+User=jpq
+Group=jpq
+WorkingDirectory=/opt/jpq
+Environment=PYTHONUNBUFFERED=1
+Environment=JPQ_DB_PATH=/var/lib/jpq/jpq.sqlite3
+ExecStart=/opt/jpq/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8768 --workers 1 --ws-max-size 65536 --proxy-headers --forwarded-allow-ips=127.0.0.1
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/jpq
+
+[Install]
+WantedBy=multi-user.target

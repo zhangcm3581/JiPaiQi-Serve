@@ -1,0 +1,33 @@
+{% extends 'base.html' %}{% block content %}
+<div class="pagehead">
+  <div>
+    <h1>版本记录</h1>
+    <p>查看已关闭轮次的完整手牌与计算结果。</p>
+  </div>
+  <div class="tenant-tools">
+    <div id="historyTenantPicker"></div>
+    <div id="historyStatusPicker" class="status-picker"></div>
+  </div>
+</div>
+<div class="panel tablewrap">
+  <table>
+    <thead>
+      <tr>
+        <th>版本号</th>
+        <th>租户 ID</th>
+        <th>接收数据</th>
+        <th>计算结果</th>
+        <th>版本创建时间</th>
+        <th>关闭原因</th>
+        <th style="text-align: right">操作</th>
+      </tr>
+    </thead>
+    <tbody id="historyRows"></tbody>
+  </table>
+  <div class="history-paging">
+    <span class="pagination-status" id="historyCount"></span
+    ><button class="btn tiny" id="previousPage">上一页</button
+    ><button class="btn tiny" id="nextPage">下一页</button>
+  </div>
+</div>
+{% endblock %}
