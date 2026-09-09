@@ -1,6 +1,7 @@
 """HTTP administration, native-client WebSockets, and admin live snapshots."""
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -20,6 +21,16 @@ from .protocol import CloseRequest, TenantCreate, TenantUpdate, parse_message
 
 ROOT = Path(__file__).resolve().parent
 log = logging.getLogger("jpq")
+
+
+def static_version(directory):
+    digest = hashlib.sha256()
+    for path in sorted(directory.rglob("*")):
+        if path.is_file():
+            digest.update(path.relative_to(directory).as_posix().encode())
+            digest.update(b"\0")
+            digest.update(hashlib.sha256(path.read_bytes()).digest())
+    return digest.hexdigest()[:16]
 
 
 def wire(kind, tenant_id=None, version=None, payload=None, reply_to=None):
@@ -220,6 +231,11 @@ def create_app(db_path=None):
 
     app = FastAPI(title="JiPaiQi Serve", version="1.0.0", lifespan=lifespan)
     templates = Jinja2Templates(directory=ROOT / "templates")
+    asset_prefix = "/static/" + static_version(ROOT / "static")
+    # Relative ES module imports inherit this prefix, including nested modules.
+    app.mount(
+        asset_prefix, StaticFiles(directory=ROOT / "static"), name="versioned_static"
+    )
     app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 
     @app.middleware("http")
@@ -241,6 +257,17 @@ def create_app(db_path=None):
         response = await call_next(request)
         if request.url.path.startswith("/api"):
             response.headers["Cache-Control"] = "no-store"
+        elif request.url.path.startswith(
+            asset_prefix + "/"
+        ) and response.status_code in (
+            200,
+            304,
+        ):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        elif request.url.path.startswith("/static/") or response.headers.get(
+            "content-type", ""
+        ).startswith("text/html"):
+            response.headers["Cache-Control"] = "no-cache"
         return response
 
     @app.exception_handler(DomainError)
@@ -260,7 +287,9 @@ def create_app(db_path=None):
     async def page(request: Request):
         page_name = request.url.path.strip("/") or "overview"
         return templates.TemplateResponse(
-            request=request, name=page_name + ".html", context={"page": page_name}
+            request=request,
+            name=page_name + ".html",
+            context={"page": page_name, "asset_prefix": asset_prefix},
         )
 
     @app.get("/api/tenants")

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>JiPaiQi · 管理控制台</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="/static/css/app.css" />
+    <link rel="stylesheet" href="{{ asset_prefix }}/css/app.css" />
   </head>
   <body data-page="{{ page }}">
     {% include 'partials/icons.html' %}{% include 'partials/sidebar.html' %}
@@ -29,6 +29,6 @@
     </main>
     {% include 'partials/tenant-modal.html' %}
     <div class="toast" id="toast" role="status"></div>
-    <script type="module" src="/static/js/app.js"></script>
+    <script type="module" src="{{ asset_prefix }}/js/app.js"></script>
   </body>
 </html>
