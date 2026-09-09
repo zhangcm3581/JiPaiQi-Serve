@@ -2191,3 +2191,84 @@ body.sidebar-collapsed aside {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* Presence is readable beside the client identity, without decorating the row. */
+.device-list .device {
+  min-height: 56px;
+  padding: 9px 0;
+}
+.deviceidentity > div {
+  min-width: 0;
+  width: 100%;
+}
+.device-name-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px 8px;
+}
+.device-name-line .devicename {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.device-presence {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 5px;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.device-presence::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: currentColor;
+}
+.device-presence.online {
+  color: #178052;
+}
+.device-presence.online::before {
+  box-shadow: 0 0 0 3px #eaf5ef;
+}
+.device-presence.offline {
+  color: #a6656d;
+}
+.device-presence.unknown {
+  color: #9a702d;
+}
+.client-connections {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 0;
+  padding: 11px 16px 0;
+  color: #8591a3;
+  font-size: 11px;
+  line-height: 16px;
+}
+.client-connections > span + span {
+  border-left: 1px solid #e3e8ef;
+  margin-left: 12px;
+  padding-left: 12px;
+}
+.client-connections .connection-online {
+  color: #178052;
+}
+.client-connections b {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 1100px) {
+  .client-connections {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+}

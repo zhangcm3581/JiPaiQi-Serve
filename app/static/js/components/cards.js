@@ -39,23 +39,32 @@ export const dateTime = (value) =>
 export function renderCard(card) {
   return `<span class="card ${["h", "d"].includes(card.suit) ? "red" : ""}" title="${escapeHtml(suits[card.suit] + card.rank)}"><span class="rank">${escapeHtml(card.rank)}</span><span class="suit">${suits[card.suit] || ""}</span></span>`;
 }
-export function renderHands(round, live = true) {
+export function renderHands(round, live = true, connected = true) {
   const devices = [...round.devices];
   while (devices.length < 7)
     devices.push({ client_id: null, cards: null, online: false });
   return devices
-    .map((device, index) => {
+    .map((device) => {
       const received = !!device.cards,
         waiting =
           live &&
           !received &&
           ["waiting", "collecting"].includes(round.state) &&
           round.enabled;
+      const presence =
+        !device.client_id || !live
+          ? ""
+          : !connected
+            ? '<span class="device-presence unknown">待同步</span>'
+            : `<span class="device-presence ${device.online ? "online" : "offline"}">${device.online ? "在线" : "离线"}</span>`;
+      const identity = device.client_id
+        ? `<div class="device-name-line"><div class="devicename" title="${escapeHtml(device.client_id)}">客户端 ${escapeHtml(device.client_id)}</div>${presence}</div>`
+        : '<div class="devicename">待登记设备</div><div class="deviceid">尚未连接</div>';
       const label = received ? "已上报" : live ? "等待上报" : "本轮未上报";
       const content = received
         ? device.cards.map(renderCard).join("")
         : `<div class="hand-pending" role="status"><span class="waiting-dots ${waiting ? "animated" : ""}" aria-hidden="true"><i></i><i></i><i></i></span><span>${label}</span></div>`;
-      return `<div class="device ${received ? "" : "missing"}"><div class="deviceidentity"><div><div class="devicename">${device.client_id ? "客户端 " + String(index + 1).padStart(2, "0") : "待登记设备"}</div><div class="deviceid" title="${escapeHtml(device.client_id)}">${escapeHtml(device.client_id || "尚未连接")}</div></div></div><div class="cards">${content}</div><div class="device-time ${received ? "" : "wait"}"><b>${received ? "已上报" : "未上报"}</b>${received ? clock(device.received_at_ms) : device.client_id ? (live ? (device.online ? "在线" : "离线") : "—") : "—"}</div></div>`;
+      return `<div class="device ${received ? "" : "missing"}"><div class="deviceidentity"><div>${identity}</div></div><div class="cards">${content}</div><div class="device-time ${received ? "" : "wait"}"><b>${received ? "已上报" : "未上报"}</b>${received ? clock(device.received_at_ms) : "—"}</div></div>`;
     })
     .join("");
 }

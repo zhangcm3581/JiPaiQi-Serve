@@ -143,11 +143,11 @@ function updateTenants(items) {
 function renderRound(data) {
   if (!$("#workbench") || data.tenant_id !== selected) return;
   round = data;
-  $("#workbench").innerHTML = renderWorkbench(data);
+  $("#workbench").innerHTML = renderWorkbench(data, true, online);
   $("#closeRound").disabled = !data.enabled;
   $("#navCount").textContent = data.received_count;
   $("#liveStatus").textContent = online
-    ? "实时连接已建立"
+    ? "管理页面已连接"
     : "连接中断 · 显示最后同步数据";
 }
 async function chooseTenant(id) {
@@ -235,13 +235,15 @@ live = new LiveConnection(
   },
   (connected) => {
     online = connected;
+    if (!connected && round && $("#workbench"))
+      $("#workbench").innerHTML = renderWorkbench(round, true, false);
     $("#connectionLabel").textContent = connected
-      ? "实时连接已建立"
+      ? "管理页面已连接"
       : "连接中断 · 正在重连";
     $("#connection").classList.toggle("offline", !connected);
     if ($("#liveStatus"))
       $("#liveStatus").textContent = connected
-        ? "实时连接已建立"
+        ? "管理页面已连接"
         : "正在重连 · 数据可能已过期";
   },
 );
