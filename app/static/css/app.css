@@ -2111,7 +2111,8 @@ body.sidebar-collapsed aside {
 .pagehead h1 {
   font-size: 23px;
 }
-.connection.offline .dot {
+.connection.offline .dot,
+#live .live.offline .dot {
   background: #c49b5e;
 }
 .connection .dot {

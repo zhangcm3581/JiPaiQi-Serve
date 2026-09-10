@@ -69,6 +69,12 @@ async def receive_text(ws):
     return message["text"]
 
 
+async def close_replaced_socket(ws):
+    # Network cleanup cannot hold the global business lock or delay a new peer.
+    with suppress(Exception):
+        await asyncio.wait_for(ws.close(code=4001, reason="已由新连接替换"), timeout=5)
+
+
 @dataclass(eq=False)
 class Peer:
     socket: WebSocket
@@ -255,6 +261,9 @@ def create_app(db_path=None):
                     )
             request._body = bytes(body)
         response = await call_next(request)
+        if response.headers.get("content-type", "").startswith("text/html"):
+            response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
+            response.headers["X-Frame-Options"] = "DENY"
         if request.url.path.startswith("/api"):
             response.headers["Cache-Control"] = "no-store"
         elif request.url.path.startswith(
@@ -453,6 +462,7 @@ def create_app(db_path=None):
         e, peer = ws.app.state.engine, Peer(ws, tenant_id, client_id)
         sender = asyncio.create_task(peer.send_loop())
         key = (tenant_id, client_id)
+        retiring = None
         try:
             async with e.lock:
                 await e.expire()
@@ -460,10 +470,10 @@ def create_app(db_path=None):
                 old = e.clients.get(key)
                 if old:
                     old.closing = True
-                    with suppress(Exception):
-                        await old.socket.close(code=4001, reason="已由新连接替换")
                 e.clients[key] = peer
                 await e.publish([tenant_id])
+            if old:
+                retiring = asyncio.create_task(close_replaced_socket(old.socket))
             while True:
                 raw = await receive_text(ws)
                 request_id = None
@@ -534,6 +544,10 @@ def create_app(db_path=None):
         except (WebSocketDisconnect, asyncio.TimeoutError, RuntimeError):
             pass
         finally:
+            if retiring:
+                retiring.cancel()
+                with suppress(asyncio.CancelledError):
+                    await retiring
             async with e.lock:
                 if e.clients.get(key) is peer:
                     del e.clients[key]

@@ -241,10 +241,12 @@ live = new LiveConnection(
       ? "管理页面已连接"
       : "连接中断 · 正在重连";
     $("#connection").classList.toggle("offline", !connected);
-    if ($("#liveStatus"))
+    if ($("#liveStatus")) {
+      $("#liveStatus").parentElement.classList.toggle("offline", !connected);
       $("#liveStatus").textContent = connected
         ? "管理页面已连接"
         : "正在重连 · 数据可能已过期";
+    }
   },
 );
 live.subscribe(selected);

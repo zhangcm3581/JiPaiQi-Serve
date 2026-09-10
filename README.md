@@ -56,6 +56,8 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8768 --workers 1
 - `end_then_start`：已参与客户端观察到上一局结束、再观察到新局；`previous_round_version`须为当前版本减1，且该客户端上次绑定的确为这个版本。
 - 同一次start事件无论如何重试只能绑定原版本。离线期间漏过局间切换、半局启动、落后多轮时返回`SYNC_REQUIRED`，等待同步或后台重新登记设备。
 
+客户端“一键配”等按钮在摆牌过程中持续出现，只是界面存在信号，不能每次命中都生成新局事件。摆牌、撤销、手牌减少或恢复、按钮短暂消失不解锁本局；半局启动不能直接 initial_start。服务端版本推进也不是本机观察到结束的证据。这些规则由客户端状态机实现，现有 WebSocket v1 字段无需增加。
+
 未识别共同游戏局号，本服务无法证明截图属于哪局；上述新局证据由可信客户端负责识别。版本号只能隔离已正确绑定的数据，不能修复漏检/误检。正常客户端结束特征须连续确认，单客户端误报结束会提前关闭本轮。
 
 ## WebSocket协议（protocol_version=1）
@@ -151,3 +153,8 @@ sudo bash /opt/jpq/scripts/update.sh
 ```
 
 脚本跟随当前分支，不强制切到main；没有新提交不重启，有本地修改或分叉则停止。更新时会停服，数据库及旧依赖备份在`/var/backups/jpq-updates/`，自动回退保留当前数据库。详细行为与私有仓库配置见部署文档第1、5节。
+
+
+### 2026-09-10 联调回归
+
+本地完整80项Python回归、23项真实TCP/HTTP/WS场景报告见 `reports/full-audit-20260910/server-final.html`。网页连接还需执行 `node --test tests/browser/live_connection.test.cjs`（6项）；覆盖静默断线、浏览器离线、退役连接迟到事件、重连订阅与清理。工作台现在收到离线事件立即显示待同步，35秒无消息则强制恢复连接。HTML禁用iframe嵌入；替换客户端时不在业务锁内等待旧连接关闭。这里的记录不代表线上已经部署，完整客户端联合报告位于相邻JiPaiQi-Mobile的docs/full-integration-audit-2026-09-10.md。
