@@ -171,13 +171,14 @@ class Engine:
         peer.offer(
             wire("round.state", d["tenant_id"], d["round_version"], state, reply_to)
         )
-        if d["result"] is not None and d["state"] == "ready":
+        participant = next((c for c in d["devices"] if c["client_id"] == peer.client_id and c["cards"]), None)
+        if d["result"] is not None and d["state"] == "ready" and participant:
             peer.offer(
                 wire(
                     "round.result",
                     d["tenant_id"],
                     d["round_version"],
-                    {"remaining_count": 13, "cards": d["result"]},
+                    {"remaining_count": 13, "cards": d["result"], "client_id": peer.client_id, "start_event_id": participant["start_event_id"]},
                 )
             )
 

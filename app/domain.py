@@ -380,8 +380,24 @@ class Store:
                 )
                 ack["bound_round_version"] = version
             elif action == "hand.submit":
-                require(c["last_bound"] == version, "NOT_JOINED", "请先完成新局绑定")
                 cards = normalize_hand(payload["cards"])
+                event = payload.get("start_event_id")
+                if event:
+                    start_fp = encode({"version": version, "action": action, "cards": cards})
+                    start = db.execute("SELECT * FROM starts WHERE tenant_id=? AND client_id=? AND event_id=?", (tenant_id, client_id, event)).fetchone()
+                    if start:
+                        require(start["fingerprint"] == start_fp, "START_EVENT_CONFLICT", "同一开局事件不可换轮次或手牌")
+                    else:
+                        require(c["last_bound"] != version, "START_EVENT_CONFLICT", "本客户端本轮已有其他开局事件")
+                        db.execute("INSERT INTO starts VALUES(?,?,?,?,?)", (tenant_id, client_id, event, version, start_fp))
+                        db.execute("UPDATE clients SET last_bound=? WHERE tenant_id=? AND id=?", (version, tenant_id, client_id))
+                    db.execute("UPDATE rounds SET state='collecting' WHERE tenant_id=? AND version=? AND state='waiting'", (tenant_id, version))
+                    r = self.round(db, tenant_id, version)
+                    ack["bound_round_version"] = version
+                    ack["start_event_id"] = event
+                else:
+                    # Compatibility for older clients using round.join first.
+                    require(c["last_bound"] == version, "NOT_JOINED", "请先完成新局绑定")
                 old_hand = db.execute(
                     "SELECT cards FROM hands WHERE tenant_id=? AND version=? AND client_id=?",
                     (tenant_id, version, client_id),
@@ -518,12 +534,14 @@ class Store:
                     (tenant_id, r["version"]),
                 )
             }
+            events = {x["client_id"]: x["event_id"] for x in db.execute("SELECT client_id,event_id FROM starts WHERE tenant_id=? AND version=?", (tenant_id, r["version"]))}
             devices = []
             for cid in members:
                 h = by_id.get(cid)
                 devices.append(
                     {
                         "client_id": cid,
+                        "start_event_id": events.get(cid),
                         "cards": json.loads(h["cards"]) if h else None,
                         "received_at_ms": h["received_at"] if h else None,
                         "bound_round_version": (

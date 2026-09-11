@@ -711,3 +711,50 @@ def test_wire_offline_identity_does_not_block_seven_other_clients(server):
     for peer in peers:
         assert peer.wait("round.result")["payload"]["remaining_count"] == 13
     assert server.detail()["missing_client_ids"] == []
+
+
+@scenario("单次提交与定向结果", "一次上报", "20个ID连接，任意7个直接提交；07换12再换回；重复提交与旧轮次重试。", "无round.join；每轮13张准确结果只发给提交者；四轮正常推进。")
+def test_wire_atomic_roster_and_targeted_results(server):
+    server.tenant()
+    peers = {i: server.client(cid=f"emu_{i:02}") for i in range(1,21)}
+    deck = shuffled_deck()
+    groups = [list(range(1,8)), [1,2,3,4,5,6,12], [1,2,3,4,5,6,12], list(range(1,8))]
+    for version, group in enumerate(groups,1):
+        requests=[]
+        for slot,number in enumerate(group):
+            p=peers[number]
+            m=p.message("hand.submit",version,{"start_event_id":f"game_{version}_{number}","cards":deck[slot*13:(slot+1)*13]})
+            requests.append(m)
+            ok(p.call_message(m))
+        for number in group:
+            result=peers[number].wait("round.result",lambda m:m["round_version"]==version)
+            assert result_counts(result["payload"]["cards"])==expected_result(deck)
+            assert result["payload"]["client_id"]==peers[number].cid
+            assert result["payload"]["start_event_id"]==f"game_{version}_{number}"
+        observer=peers[20]
+        assert observer.call("round.get",version)["type"]=="round.state"
+        assert not any(m["type"]=="round.result" for m in observer.messages)
+        ok(peers[group[0]].call("round.end",version))
+        # Even after the round closes, a retry of the original accepted hand returns its ack.
+        ok(peers[group[0]].call_message(requests[0]))
+        for number in group[1:]:
+            error(peers[number].call("round.end",version),"ROUND_CLOSED")
+        assert server.detail()["round_version"]==version+1
+    assert not any(m["type"]=="round.join" for p in peers.values() for m in p.sent)
+    server.note(rounds=4,registered=20,participant_count=7,all_results_exact=True)
+
+
+@scenario("断线丢确认后的单次提交重试", "一次上报", "服务器已保存后断开连接，同ID重连重发原请求。", "返回原确认且只计1份；拒绝内容修改和旧轮改标。")
+def test_wire_atomic_reconnect_idempotency(server):
+    server.tenant();p=server.client(cid="reconnect_A");deck=shuffled_deck()
+    m=p.message("hand.submit",1,{"start_event_id":"once","cards":deck[:13]})
+    accepted=p.call_message(m);ok(accepted);p.socket.close()
+    replacement=server.client(cid="reconnect_A")
+    assert replacement.call_message(m)==accepted
+    assert server.detail()["received_count"]==1
+    changed=copy.deepcopy(m);changed["payload"]["cards"]=deck[13:26]
+    error(replacement.call_message(changed),"REQUEST_CONFLICT")
+    ok(replacement.call("round.end",1))
+    changed=copy.deepcopy(m);changed["request_id"]="new_req";changed["round_version"]=2
+    error(replacement.call_message(changed),"START_EVENT_CONFLICT")
+    assert server.detail()["received_count"]==0

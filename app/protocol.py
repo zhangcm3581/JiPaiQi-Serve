@@ -59,6 +59,7 @@ class HandCard(StrictModel):
 
 
 class HandPayload(StrictModel):
+    start_event_id: StrictStr | None = Field(default=None, min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_-]+$")
     cards: list[HandCard] = Field(min_length=13, max_length=13)
 
 
@@ -73,4 +74,6 @@ def parse_message(value):
     body = PAYLOADS.get(envelope.type, EmptyPayload).model_validate(envelope.payload)
     result = envelope.model_dump()
     result["payload"] = body.model_dump()
+    if envelope.type == "hand.submit" and body.start_event_id is None:
+        result["payload"].pop("start_event_id", None)
     return result
