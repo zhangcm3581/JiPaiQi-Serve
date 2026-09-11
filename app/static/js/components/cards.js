@@ -40,7 +40,9 @@ export function renderCard(card) {
   return `<span class="card ${["h", "d"].includes(card.suit) ? "red" : ""}" title="${escapeHtml(suits[card.suit] + card.rank)}"><span class="rank">${escapeHtml(card.rank)}</span><span class="suit">${suits[card.suit] || ""}</span></span>`;
 }
 export function renderHands(round, live = true, connected = true) {
-  const devices = [...round.devices];
+  const devices = [...round.devices].sort((a, b) =>
+    Number(!!b.cards) - Number(!!a.cards) || Number(!!b.online) - Number(!!a.online)
+  );
   while (devices.length < 7)
     devices.push({ client_id: null, cards: null, online: false });
   return devices

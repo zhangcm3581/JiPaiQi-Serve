@@ -269,10 +269,8 @@ class Store:
                 (tenant_id, client_id),
             ).fetchone()
             if not c:
-                count = db.execute(
-                    "SELECT count(*) FROM clients WHERE tenant_id=?", (tenant_id,)
-                ).fetchone()[0]
-                require(count < 7, "CLIENT_LIMIT", "该租户已登记7个客户端")
+                # Registration is durable identity, not a reserved round slot.
+                # hand.submit atomically locks the result after seven distinct hands.
                 db.execute(
                     "INSERT INTO clients VALUES(?,?,NULL,?)",
                     (tenant_id, client_id, self.clock()),
@@ -545,7 +543,10 @@ class Store:
                 "devices": devices,
                 "received_count": len(hands),
                 "expected_count": 7,
-                "missing_client_ids": [cid for cid in members if cid not in by_id],
+                "missing_client_ids": (
+                    [cid for cid in members if cid in bound_here and cid not in by_id]
+                    if len(hands) < 7 else []
+                ),
                 "unregistered_count": max(0, 7 - len(members)),
                 "created_at_ms": r["created_at"],
                 "first_received_at_ms": r["first_received_at"],

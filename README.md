@@ -33,7 +33,7 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8768 --workers 1
 
 - `tenant_id`是1～32位数字组成的**字符串**，例如 `"100001"`、`"001002"`，前导零保留。
 - 创建租户：ID、备注（单个输入框）、当前版本（默认整数1）、超时秒数（默认180）。
-- 每个租户最多登记7个客户端。客户端首次连接自动登记，重连使用固定`client_id`，禁止每次连接生成新ID。
+- 历史登记设备不占本轮名额，客户端 ID 不限定为 01–07。每轮按最先成功提交的 7 个不同客户端的合法手牌计算；收齐后锁定，拒绝额外手牌。离线未上报设备不会阻止其他 ID 加入。客户端首次连接自动登记，重连使用固定`client_id`，禁止每次连接生成新ID。
 - 版本唯一键：`tenant_id + round_version`；不同租户可以有相同版本。
 - 每客户端每轮一份：`tenant_id + round_version + client_id`。
 - `waiting → collecting → ready → closed`。结束/超时可从collecting直接到closed。
@@ -100,7 +100,7 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8768 --workers 1
 
 `request_id`和`start_event_id`使用UUID或其他持久唯一值，只允许英文字母、数字、下划线、连字符，最长100字；每次新业务操作换ID，重试原操作沿用ID和原消息内容。完整13张上传示例见 [客户端消息示例](docs/client-examples.md)。
 
-其他错误：`INVALID_MESSAGE, TENANT_NOT_FOUND, TENANT_DISABLED, CLIENT_LIMIT, CLIENT_NOT_FOUND, VERSION_MISMATCH, ROUND_NOT_FOUND, ROUND_CLOSED, ROUND_READY, NOT_JOINED, SYNC_REQUIRED, START_EVENT_CONFLICT`。拒绝旧版本业务写入，不自动转交最新版本。超时任务与写入串行，结束/第7份/重复消息并发也不会双重计算或推进两次。
+其他错误：`INVALID_MESSAGE, TENANT_NOT_FOUND, TENANT_DISABLED, CLIENT_NOT_FOUND, VERSION_MISMATCH, ROUND_NOT_FOUND, ROUND_CLOSED, ROUND_READY, NOT_JOINED, SYNC_REQUIRED, START_EVENT_CONFLICT`。拒绝旧版本业务写入，不自动转交最新版本。超时任务与写入串行，结束/第7份/重复消息并发也不会双重计算或推进两次。
 
 WebSocket消息上限64KiB，HTTP JSON上限64KiB。重连有退避；发送成功不等于入库，必须等待ack。断线可能漏推送，客户端需round.get恢复当前状态，并丢弃不属于绑定版本的结果。
 

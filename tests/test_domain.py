@@ -172,10 +172,10 @@ def test_manual_versions_are_forward_only_and_disable_is_persistent(store):
     assert store.detail("100001")["state"] == "waiting"
 
 
-def test_device_limit_and_history_survives_reregistration(store, deck):
+def test_registration_and_history_survives_reregistration(store, deck):
     for n in range(7):
         store.register_client("100001", f"c{n}")
-    fails("CLIENT_LIMIT", lambda: store.register_client("100001", "extra"))
+
     join(store, "c0")
     submit(store, deck[:13], "c0")
     fails("ROUND_ACTIVE", lambda: store.delete_client("100001", "c0"))
@@ -266,3 +266,27 @@ def test_daily_summary_uses_shanghai_midnight(store, deck):
     assert store.summary()["completed_today"] == 1
     stamp[0] += 120_000  # 00:01 in Shanghai; still the same date in UTC.
     assert store.summary()["completed_today"] == 0
+
+
+def test_offline_registration_does_not_reserve_a_hand_slot(store, deck):
+    store.register_client("100001", "01")
+    for index in range(7):
+        cid = f"{index + 2:02}"
+        join(store, cid)
+        submit(store, deck[index * 13:(index + 1) * 13], cid)
+    detail = store.detail("100001")
+    assert detail["state"] == "ready"
+    assert detail["received_count"] == 7
+    assert detail["missing_client_ids"] == []
+    assert sum(c["count"] for c in detail["result"]) == 13
+    assert {d["client_id"] for d in detail["devices"] if d["cards"]} == {f"{i:02}" for i in range(2, 9)}
+    fails("ROUND_READY", lambda: join(store, "09"))
+
+
+def test_eighth_joined_client_cannot_add_an_eighth_hand(store, deck):
+    for i in range(8):
+        join(store, f"arbitrary_{i}")
+    for i in range(7):
+        submit(store, deck[i * 13:(i + 1) * 13], f"arbitrary_{i}")
+    fails("ROUND_READY", lambda: submit(store, deck[91:], "arbitrary_7"))
+    assert store.detail("100001")["received_count"] == 7

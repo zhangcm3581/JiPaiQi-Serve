@@ -468,7 +468,7 @@ def test_wire_old_cards_and_skipped_round(server):
     "连接替换、第八端与未绑定结束",
     "设备与生命周期",
     "同设备再次连接；尝试第8设备；未绑定端发送手牌和结束；原连接退场。",
-    "同ID只占一席，新连接可用；第8端拒绝；未绑定结束不推进版本。",
+    "同ID只占一席，新连接可用；第8端可登记；未绑定结束不推进版本。",
 )
 def test_wire_device_membership(server):
     server.tenant()
@@ -479,16 +479,16 @@ def test_wire_device_membership(server):
     error(replacement.submit(shuffled_deck()[:13]), "NOT_JOINED")
     for n in range(2, 8):
         server.client(cid=f"device_{n:03}")
-    extra = server.client(cid="device_008", accepted=False)
-    error(extra.wait("error"), "CLIENT_LIMIT")
-    assert len(server.detail()["devices"]) == 7
+    extra = server.client(cid="device_008")
+    assert extra.call("ping", None)["type"] == "pong"
+    assert len(server.detail()["devices"]) == 8
     assert server.detail()["round_version"] == 1
     first.reader.join(timeout=2)
     assert first.closed
     server.note(
-        registered=7,
+        registered=8,
         replacement_code=first.socket.close_code,
-        extra_error="CLIENT_LIMIT",
+        extra_accepted=True,
     )
 
 
@@ -695,3 +695,18 @@ def test_wire_oversized_frame(server):
     assert fresh.call("ping", None)["type"] == "pong"
     assert server.detail()["received_count"] == 0
     server.note(bytes_sent=65537, close_code=1009, stored_hands=0)
+
+
+@scenario("离线01不占本轮名额", "设备与生命周期", "01连接后离线，02到08上报。", "任意七个不同客户端收齐并收到13张结果。")
+def test_wire_offline_identity_does_not_block_seven_other_clients(server):
+    server.tenant()
+    old = server.client(cid="01")
+    old.socket.close()
+    peers = [server.client(cid=f"{i:02}") for i in range(2, 9)]
+    deck = shuffled_deck()
+    for i, peer in enumerate(peers):
+        ok(peer.join())
+        ok(peer.submit(deck[i*13:(i+1)*13]))
+    for peer in peers:
+        assert peer.wait("round.result")["payload"]["remaining_count"] == 13
+    assert server.detail()["missing_client_ids"] == []
