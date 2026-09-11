@@ -443,7 +443,7 @@ def test_wire_seventh_races_end(server):
     "服务端版本变更不能给旧牌重新编号",
     "版本与超时",
     "旧版结束后直接给手牌换版本提交；重复新局事件；后台跳至版本8后客户端补报。",
-    "未绑定、复用新局事件、跳过多局均拒绝；新轮次始终零手牌。",
+    "未绑定、复用新局事件、伪造上次绑定均拒绝；旧ID可凭新事件跨轮重新加入。",
 )
 def test_wire_old_cards_and_skipped_round(server):
     server.tenant()
@@ -455,8 +455,9 @@ def test_wire_old_cards_and_skipped_round(server):
     error(p.join(2, 1, event="original-start"), "START_EVENT_CONFLICT")
     ok(p.join(2, 1))
     server.api("PATCH", "/api/tenants/900001", {"round_version": 8})
-    error(p.join(8, 2), "SYNC_REQUIRED")
+    error(p.join(8, 1), "SYNC_REQUIRED")
     error(p.submit(shuffled_deck()[:13], 8), "NOT_JOINED")
+    ok(p.join(8, 2))
     assert server.detail()["received_count"] == 0
     server.note(
         current_version=8,

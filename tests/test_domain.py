@@ -125,7 +125,8 @@ def test_new_version_cannot_receive_old_or_unbound_data(store, deck):
     fails("SYNC_REQUIRED", lambda: join(store, version=2))
     join(store, version=2, previous=1)
     store.update_tenant("100001", {"round_version": 8})
-    fails("SYNC_REQUIRED", lambda: join(store, version=8, previous=2))
+    fails("SYNC_REQUIRED", lambda: join(store, version=8, previous=1))
+    join(store, version=8, previous=2)
 
 
 def test_unregistered_or_unjoined_device_cannot_end_round(store):
@@ -290,3 +291,29 @@ def test_eighth_joined_client_cannot_add_an_eighth_hand(store, deck):
         submit(store, deck[i * 13:(i + 1) * 13], f"arbitrary_{i}")
     fails("ROUND_READY", lambda: submit(store, deck[91:], "arbitrary_7"))
     assert store.detail("100001")["received_count"] == 7
+
+
+def test_twenty_id_limit_preserves_existing_reconnects(store):
+    for i in range(1, 21):
+        store.register_client("100001", f"{i:02}")
+    store.register_client("100001", "07")
+    fails("CLIENT_LIMIT", lambda: store.register_client("100001", "21"))
+    assert len(store.detail("100001")["devices"]) == 20
+
+
+def test_any_seven_can_swap_07_to_12_and_back_after_skipped_rounds(store, deck):
+    for i in range(1, 21):
+        store.register_client("100001", f"{i:02}")
+    previous = {}
+    groups = [list(range(1,8)), [1,2,3,4,5,6,12], [1,2,3,4,5,6,12], list(range(1,8))]
+    for version, group in enumerate(groups,1):
+        for index, number in enumerate(group):
+            cid=f"{number:02}"
+            join(store,cid,version=version,previous=previous.get(cid))
+            previous[cid]=version
+            submit(store,deck[index*13:(index+1)*13],cid,version=version)
+        detail=store.detail("100001")
+        assert detail["state"] == "ready"
+        assert sum(c["count"] for c in detail["result"]) == 13
+        assert {d["client_id"] for d in detail["devices"] if d["cards"]} == {f"{i:02}" for i in group}
+        store.process("100001","01",request("round.end","01",version=version))

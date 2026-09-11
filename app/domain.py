@@ -269,8 +269,9 @@ class Store:
                 (tenant_id, client_id),
             ).fetchone()
             if not c:
-                # Registration is durable identity, not a reserved round slot.
-                # hand.submit atomically locks the result after seven distinct hands.
+                # Durable identities have their own capacity, independent of seven hands.
+                count = db.execute("SELECT count(*) FROM clients WHERE tenant_id=?", (tenant_id,)).fetchone()[0]
+                require(count < 20, "CLIENT_LIMIT", "该租户已登记20个客户端，请先移除不再使用的ID")
                 db.execute(
                     "INSERT INTO clients VALUES(?,?,NULL,?)",
                     (tenant_id, client_id, self.clock()),
@@ -355,9 +356,9 @@ class Store:
                     else:
                         previous = payload["previous_round_version"]
                         require(
-                            previous == version - 1 and c["last_bound"] == previous,
+                            previous is not None and previous < version and c["last_bound"] == previous,
                             "SYNC_REQUIRED",
-                            "已失步，请等待同步或重新登记设备",
+                            "上次绑定不一致，请重新同步",
                         )
                     db.execute(
                         "INSERT INTO starts VALUES(?,?,?,?,?)",

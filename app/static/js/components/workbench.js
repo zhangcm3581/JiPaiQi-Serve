@@ -44,7 +44,7 @@ export function renderWorkbench(round, live = true, connected = true) {
   const connectionSummary = live
     ? `<div class="client-connections" role="status">${
         connected
-          ? `<span class="connection-online">在线 <b>${onlineCount}</b> / 7</span><span class="connection-offline">离线 <b>${offlineCount}</b></span><span>待登记 <b>${round.unregistered_count}</b></span>`
+          ? `<span class="connection-online">在线 <b>${onlineCount}</b></span><span class="connection-offline">离线 <b>${offlineCount}</b></span><span>已登记 <b>${round.devices.length}</b> / 20</span>`
           : '<span>管理页面连接中断 · 客户端状态待同步</span>'
       }</div>`
     : "";
