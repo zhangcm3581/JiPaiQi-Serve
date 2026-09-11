@@ -40,7 +40,9 @@ export function renderCard(card) {
   return `<span class="card ${["h", "d"].includes(card.suit) ? "red" : ""}" title="${escapeHtml(suits[card.suit] + card.rank)}"><span class="rank">${escapeHtml(card.rank)}</span><span class="suit">${suits[card.suit] || ""}</span></span>`;
 }
 export function renderHands(round, live = true, connected = true) {
-  const devices = [...round.devices].sort((a, b) =>
+  const devices = round.devices
+    .filter((device) => !live || device.online || device.cards)
+    .sort((a, b) =>
     Number(!!b.cards) - Number(!!a.cards) || Number(!!b.online) - Number(!!a.online)
   );
   while (devices.length < 7)
@@ -61,7 +63,7 @@ export function renderHands(round, live = true, connected = true) {
             : `<span class="device-presence ${device.online ? "online" : "offline"}">${device.online ? "在线" : "离线"}</span>`;
       const identity = device.client_id
         ? `<div class="device-name-line"><div class="devicename" title="${escapeHtml(device.client_id)}">客户端 ${escapeHtml(device.client_id)}</div>${presence}</div>`
-        : '<div class="devicename">待登记设备</div><div class="deviceid">尚未连接</div>';
+        : '<div class="devicename">等待客户端连接</div><div class="deviceid">连接后显示实际 ID</div>';
       const label = received ? "已上报" : live ? "等待上报" : "本轮未上报";
       const content = received
         ? device.cards.map(renderCard).join("")

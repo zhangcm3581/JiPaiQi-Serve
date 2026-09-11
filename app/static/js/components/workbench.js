@@ -22,11 +22,7 @@ export function renderWorkbench(round, live = true, connected = true) {
           ready: "结果已锁定",
           closed: "已关闭",
         }[round.state];
-  const pending = round.missing_client_ids.length
-    ? `等待 ${round.missing_client_ids[0]}${round.missing_client_ids.length > 1 ? " 等设备" : ""}上报`
-    : round.unregistered_count
-      ? `还有 ${round.unregistered_count} 个设备未登记`
-      : "等待新局与手牌上报";
+  const pending = n ? `还差 ${7 - n} 份手牌` : "等待当前客户端的新局与手牌上报";
   const status = ready
     ? "13 张结果已生成"
     : live
