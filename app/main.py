@@ -339,6 +339,31 @@ def create_app(db_path=None):
             await e.publish([tenant_id])
             return result
 
+    @app.delete("/api/tenants/{tenant_id}")
+    async def delete_tenant(tenant_id: str, request: Request):
+        e = request.app.state.engine
+        retired = []
+        async with e.lock:
+            await e.db("delete_tenant", tenant_id)
+            for key, peer in list(e.clients.items()):
+                if peer.tenant_id == tenant_id:
+                    peer.closing = True
+                    del e.clients[key]
+                    retired.append(peer)
+            for peer in e.admins:
+                if peer.subscription == tenant_id:
+                    peer.subscription = None
+            await e.publish([])
+        # Retire connections outside the business lock. Old peers cannot write,
+        # even if the same tenant ID is created again before cleanup completes.
+        async def disconnect(peer):
+            with suppress(Exception):
+                await asyncio.wait_for(
+                    peer.socket.close(code=4004, reason="租户已删除"), timeout=5
+                )
+        await asyncio.gather(*(disconnect(peer) for peer in retired))
+        return {"ok": True}
+
     @app.get("/api/tenants/{tenant_id}/rounds/current")
     async def current(tenant_id: str, request: Request):
         e = request.app.state.engine

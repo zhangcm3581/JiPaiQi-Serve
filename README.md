@@ -120,6 +120,7 @@ WebSocket消息上限64KiB，HTTP JSON上限64KiB。重连有退避；发送成�
 | `POST /api/tenants/{id}/close` | `{round_version}`，携带期望版本避免重复关闭下一轮 |
 | `GET /api/rounds?tenant_id=&reason=&limit=20&offset=0` | 分页历史（closed），筛选可选 |
 | `GET /api/summary` | 总览真实指标 |
+| `DELETE /api/tenants/{id}` | 物理删除租户及全部手牌、版本、设备、开局和请求记录；断开在线客户端。不存在返回404。全局当日计算统计保留。 |
 | `DELETE /api/tenants/{id}/clients/{client_id}` | 重新登记失步设备：仅waiting且设备离线时允许 |
 | `GET /health` | 存活检测 |
 

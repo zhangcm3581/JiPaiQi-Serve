@@ -280,6 +280,14 @@ class Store:
             )
         return {"tenant_id": tenant_id}
 
+    def delete_tenant(self, tenant_id):
+        with self.connect(True) as db:
+            self.tenant(db, tenant_id)
+            # Delete children first, including tables without foreign keys.
+            for table in ("hands", "starts", "requests", "clients", "rounds"):
+                db.execute(f"DELETE FROM {table} WHERE tenant_id=?", (tenant_id,))
+            db.execute("DELETE FROM tenants WHERE id=?", (tenant_id,))
+
     def close_round(self, tenant_id, version):
         valid_version(version)
         with self.connect(True) as db:

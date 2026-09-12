@@ -10,6 +10,7 @@ export function setupTenants({
   let editing = null,
     original = null,
     deviceTenant = null;
+  const deleting = new Set();
   const form = document.querySelector("#tenantForm"),
     idInput = document.querySelector("#tenantId");
   function open(id = null) {
@@ -97,6 +98,23 @@ export function setupTenants({
     if (b.hasAttribute("data-create")) open();
     if (b.dataset.edit) open(b.dataset.edit);
     if (b.dataset.devices) showDevices(b.dataset.devices);
+    if (b.dataset.deleteTenant) {
+      const id = b.dataset.deleteTenant;
+      if (deleting.has(id)) return;
+      if (!window.confirm(`确定永久删除租户 ${id}？\n\n将物理删除该租户及其全部手牌、版本记录、设备登记和请求记录，并断开在线客户端。此操作不可恢复。`)) return;
+      deleting.add(id);
+      b.disabled = true;
+      try {
+        await api(`/api/tenants/${encodeURIComponent(id)}`, { method: "DELETE" });
+        await refresh();
+        toast("租户及其手牌数据已永久删除");
+      } catch (error) {
+        toast(error.message);
+      } finally {
+        deleting.delete(id);
+        render(getTenants());
+      }
+    }
     if (b.dataset.removeClient) {
       b.disabled = true;
       try {
@@ -126,7 +144,7 @@ export function setupTenants({
       ? items
           .map(
             (t) =>
-              `<tr><td><div class="tenantcell"><span class="tenanticon">${esc(t.tenant_id.slice(-2))}</span><strong>${esc(t.tenant_id)}</strong></div></td><td class="tenantnote" title="${esc(t.note)}">${esc(t.note || "暂无备注")}</td><td><span class="version">${t.round_version}</span></td><td><button class="textbtn" data-devices="${esc(t.tenant_id)}">${t.online_count} / ${t.registered_count}</button></td><td><span class="badge ${t.enabled ? "" : "gray"}">${t.enabled ? "已启用" : "已停用"}</span></td><td style="text-align:right"><a class="textbtn" href="/live?tenant=${encodeURIComponent(t.tenant_id)}">查看</a><button class="textbtn" data-edit="${esc(t.tenant_id)}">编辑租户</button></td></tr>`,
+              `<tr><td><div class="tenantcell"><span class="tenanticon">${esc(t.tenant_id.slice(-2))}</span><strong>${esc(t.tenant_id)}</strong></div></td><td class="tenantnote" title="${esc(t.note)}">${esc(t.note || "暂无备注")}</td><td><span class="version">${t.round_version}</span></td><td><button class="textbtn" data-devices="${esc(t.tenant_id)}">${t.online_count} / ${t.registered_count}</button></td><td><span class="badge ${t.enabled ? "" : "gray"}">${t.enabled ? "已启用" : "已停用"}</span></td><td style="text-align:right"><a class="textbtn" href="/live?tenant=${encodeURIComponent(t.tenant_id)}">查看</a><button class="textbtn" data-edit="${esc(t.tenant_id)}">编辑租户</button><button class="textbtn danger" data-delete-tenant="${esc(t.tenant_id)}" ${deleting.has(t.tenant_id) ? "disabled" : ""}>删除</button></td></tr>`,
           )
           .join("")
       : '<tr><td colspan="6" class="empty">没有匹配的租户。点击“创建租户”开始。</td></tr>';

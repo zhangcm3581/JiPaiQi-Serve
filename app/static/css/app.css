@@ -2273,3 +2273,6 @@ body.sidebar-collapsed aside {
     padding-right: 12px;
   }
 }
+
+.textbtn.danger { color: #dc3545; }
+.textbtn:disabled { opacity: 0.5; cursor: not-allowed; }
