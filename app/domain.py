@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
 SUITS = ["s", "h", "c", "d"]
 MAX_VERSION = 2147483646
+HISTORY_ROUNDS = 5
 
 
 def now_ms():
@@ -110,8 +111,49 @@ class Store:
               tenant_id TEXT NOT NULL, client_id TEXT NOT NULL, request_id TEXT NOT NULL,
               fingerprint TEXT NOT NULL, reply TEXT NOT NULL,
               PRIMARY KEY(tenant_id,client_id,request_id));
-            CREATE INDEX IF NOT EXISTS rounds_closed ON rounds(closed_at DESC);
+            CREATE INDEX IF NOT EXISTS starts_round ON starts(tenant_id,version,client_id,event_id);
+            CREATE INDEX IF NOT EXISTS requests_round ON requests(tenant_id,json_extract(reply,'$.round_version'));
+            CREATE INDEX IF NOT EXISTS rounds_retention ON rounds(tenant_id,version DESC) WHERE state='closed';
+            CREATE INDEX IF NOT EXISTS rounds_history ON rounds(closed_at DESC,tenant_id,version DESC) WHERE state='closed';
+            CREATE INDEX IF NOT EXISTS rounds_history_tenant ON rounds(tenant_id,closed_at DESC,version DESC) WHERE state='closed';
+            CREATE INDEX IF NOT EXISTS rounds_expiry ON rounds(deadline_at,tenant_id,version) WHERE state!='closed';
+            CREATE INDEX IF NOT EXISTS rounds_ready ON rounds(ready_at) WHERE result IS NOT NULL;
+            CREATE TABLE IF NOT EXISTS daily_stats(
+              day TEXT PRIMARY KEY, completed_count INTEGER NOT NULL, calculation_total REAL NOT NULL);
+            CREATE TABLE IF NOT EXISTS schema_migrations(name TEXT PRIMARY KEY);
+            DROP INDEX IF EXISTS rounds_closed;
             """)
+
+        # Upgrade before accepting traffic: capture today's aggregate before removing old hands.
+        with self.connect(True) as db:
+            if not db.execute("SELECT 1 FROM schema_migrations WHERE name='five_round_history'").fetchone():
+                stamp = self.clock()
+                midnight = datetime.fromtimestamp(stamp / 1000, ZoneInfo("Asia/Shanghai")).replace(hour=0, minute=0, second=0, microsecond=0)
+                totals = db.execute("SELECT count(*),coalesce(sum(calculation_ms),0) FROM rounds WHERE result IS NOT NULL AND ready_at>=? AND ready_at<=?", (int(midnight.timestamp()*1000), stamp)).fetchone()
+                db.execute("INSERT OR REPLACE INTO daily_stats VALUES(?,?,?)", (self._day(stamp), totals[0], totals[1]))
+                db.execute("INSERT INTO schema_migrations VALUES('five_round_history')")
+            for tenant in db.execute("SELECT id FROM tenants").fetchall():
+                self._prune_history(db, tenant[0])
+
+    @staticmethod
+    def _day(stamp):
+        return datetime.fromtimestamp(stamp / 1000, ZoneInfo("Asia/Shanghai")).date().isoformat()
+
+    def _prune_history(self, db, tenant_id):
+        # Count actual closed rounds, not numeric distance: administrators may jump versions.
+        cutoff = db.execute("SELECT version FROM rounds WHERE tenant_id=? AND state='closed' ORDER BY version DESC LIMIT 1 OFFSET ?", (tenant_id, HISTORY_ROUNDS)).fetchone()
+        if cutoff is None:
+            return
+        boundary = (tenant_id, cutoff[0])
+        db.execute("DELETE FROM hands WHERE tenant_id=? AND version<=?", boundary)
+        db.execute("DELETE FROM starts WHERE tenant_id=? AND version<=?", boundary)
+        db.execute("DELETE FROM requests WHERE tenant_id=? AND json_extract(reply,'$.round_version')<=?", boundary)
+        db.execute("DELETE FROM rounds WHERE tenant_id=? AND version<=? AND state='closed'", boundary)
+
+    def _record_calculation(self, db, stamp, elapsed):
+        day = self._day(stamp)
+        db.execute("DELETE FROM daily_stats WHERE day<>?", (day,))
+        db.execute("INSERT INTO daily_stats VALUES(?,1,?) ON CONFLICT(day) DO UPDATE SET completed_count=completed_count+1,calculation_total=calculation_total+excluded.calculation_total", (day, elapsed))
 
     @contextmanager
     def connect(self, write=False):
@@ -139,7 +181,7 @@ class Store:
         r = db.execute(
             "SELECT * FROM rounds WHERE tenant_id=? AND version=?", (tenant_id, version)
         ).fetchone()
-        require(r is not None, "ROUND_NOT_FOUND", "版本不存在", 404)
+        require(r is not None, "ROUND_NOT_FOUND", "版本不存在或历史已清理", 404)
         return r
 
     def _new_round(self, db, tenant_id, version):
@@ -199,6 +241,7 @@ class Store:
             "WHERE tenant_id=? AND version=?",
             ("closed", self.clock(), reason, encode(members), t["id"], t["version"]),
         )
+        self._prune_history(db, t["id"])
         if version > MAX_VERSION:
             # Never wrap a numeric version onto a previously used round.
             db.execute("UPDATE tenants SET enabled=0 WHERE id=?", (t["id"],))
@@ -317,6 +360,7 @@ class Store:
                 message["type"],
             )
             valid_version(version)
+            require(version >= t["version"], "ROUND_CLOSED", "本轮已关闭或历史已清理，请同步当前版本")
             r = self.round(db, tenant_id, version)
             require(r["state"] != "closed", "ROUND_CLOSED", "本轮已关闭")
             require(version == t["version"], "VERSION_MISMATCH", "版本与服务端不一致")
@@ -459,17 +503,19 @@ class Store:
                             "DECK_OVERFLOW",
                             "剩余牌数异常",
                         )
+                        elapsed = (time.perf_counter() - began) * 1000
                         db.execute(
                             "UPDATE rounds SET state='ready',result=?,ready_at=?,calculation_ms=? "
                             "WHERE tenant_id=? AND version=?",
                             (
                                 encode(result),
                                 stamp,
-                                (time.perf_counter() - began) * 1000,
+                                elapsed,
                                 tenant_id,
                                 version,
                             ),
                         )
+                        self._record_calculation(db, stamp, elapsed)
             elif action == "round.end":
                 require(
                     c["last_bound"] == version, "NOT_JOINED", "仅已绑定设备可报告结束"
@@ -527,14 +573,8 @@ class Store:
             )
             by_id = {h["client_id"]: h for h in hands}
             members = list(dict.fromkeys(members + list(by_id)))
-            bound_here = {
-                x["client_id"]
-                for x in db.execute(
-                    "SELECT client_id FROM starts WHERE tenant_id=? AND version=?",
-                    (tenant_id, r["version"]),
-                )
-            }
             events = {x["client_id"]: x["event_id"] for x in db.execute("SELECT client_id,event_id FROM starts WHERE tenant_id=? AND version=?", (tenant_id, r["version"]))}
+            bound_here = events.keys()
             devices = []
             for cid in members:
                 h = by_id.get(cid)
@@ -616,14 +656,7 @@ class Store:
             return {"items": items, "total": total, "limit": limit, "offset": offset}
 
     def summary(self):
-        stamp = self.clock()
-        start = datetime.fromtimestamp(stamp / 1000, ZoneInfo("Asia/Shanghai")).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        )
         with self.connect() as db:
-            result = db.execute(
-                "SELECT count(*) AS completed_today,avg(calculation_ms) AS average_calculation_ms FROM rounds "
-                "WHERE result IS NOT NULL AND ready_at>=? AND ready_at<=?",
-                (int(start.timestamp() * 1000), stamp),
-            ).fetchone()
-            return dict(result)
+            row = db.execute("SELECT completed_count,calculation_total FROM daily_stats WHERE day=?", (self._day(self.clock()),)).fetchone()
+            count = row[0] if row else 0
+            return {"completed_today": count, "average_calculation_ms": row[1] / count if count else None}

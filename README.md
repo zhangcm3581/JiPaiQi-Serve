@@ -1,3 +1,5 @@
+当前历史保留策略：每租户仅保留最近5个已关闭版本，当前局另算；新版启动自动清理旧历史并补齐查询索引。详见 [保留策略与测试](docs/history-retention.md)。
+
 当前一次提交版本：客户端 0.4.20 配套服务端。新客户端不再发送 `round.join`，确认完整手牌后直接发送带 `start_event_id` 的 `hand.submit`；旧两步协议暂时兼容。详见 [一次提交协议](docs/atomic-hand-submit.md)。
 
 # JiPaiQi Serve

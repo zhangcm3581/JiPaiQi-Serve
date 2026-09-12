@@ -530,7 +530,7 @@ def test_wire_admin_changes(server):
     "连续随机发牌20局及历史守恒",
     "连续运行",
     "固定随机种子生成20副洗牌；每局随机上报顺序并重试一份；七端校验结果后结束。",
-    "每局91+13=104，任何花色点数均不超过2；20份历史不变，下一版为21。",
+    "每局91+13=104，任何花色点数均不超过2；最近5份历史不变，更早历史清理，下一版为21。",
 )
 def test_wire_twenty_rounds(server):
     server.tenant()
@@ -554,7 +554,12 @@ def test_wire_twenty_rounds(server):
         ok(peers[0].call("round.end", version))
         histories.append(server.detail(version=version))
     for version, snapshot in enumerate(histories, 1):
-        assert server.detail(version=version) == snapshot
+        if version <= 15:
+            server.api("GET", f"/api/tenants/900001/rounds/{version}", status=404)
+        else:
+            assert server.detail(version=version) == snapshot
+    assert server.api("GET", "/api/rounds?tenant_id=900001")["total"] == 5
+    error(peers[0].submit(shuffled_deck(101)[:13], 1), "ROUND_CLOSED")
     assert server.detail()["round_version"] == 21
     assert max(latencies) < 2000
     server.note(

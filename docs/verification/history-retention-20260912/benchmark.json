@@ -1,0 +1,36 @@
+{
+  "closed_rounds_before": 10000,
+  "history_hands_before": 70000,
+  "baseline_detail": {
+    "mean_ms": 57.16333993992521,
+    "p50_ms": 57.11541650043728,
+    "p95_ms": 58.04541699944821,
+    "max_ms": 59.07429199942271,
+    "samples": 50
+  },
+  "indexed_only_detail": {
+    "mean_ms": 0.33462495999629027,
+    "p50_ms": 0.33279150011367165,
+    "p95_ms": 0.3897500000675791,
+    "max_ms": 0.4526250004346366,
+    "samples": 50
+  },
+  "upgrade_ms": 249.07908299974224,
+  "retained_detail": {
+    "mean_ms": 0.35667577994900057,
+    "p50_ms": 0.3519585002322856,
+    "p95_ms": 0.43416600055934396,
+    "max_ms": 0.4706249992523226,
+    "samples": 50
+  },
+  "rows_after": {
+    "rounds": 6,
+    "hands": 35,
+    "starts": 35,
+    "requests": 35
+  },
+  "starts_query_plan": [
+    "SEARCH starts USING COVERING INDEX starts_round (tenant_id=? AND version=?)"
+  ],
+  "completed_today_after": 10000
+}

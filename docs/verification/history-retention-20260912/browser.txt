@@ -1,0 +1,18 @@
+✔ live rows show actual arbitrary ids and exclude idle registrations (0.495041ms)
+✔ switching from 07 to 12 changes the visible identity (0.081833ms)
+✔ a submitted hand remains visible when that client disconnects (0.10475ms)
+✔ history retains recorded identities and display escapes text (0.071333ms)
+✔ browser offline immediately invalidates online status (1.339875ms)
+✔ silent open socket becomes stale and reconnects without a close event (0.422208ms)
+✔ valid traffic keeps the connection alive (0.608083ms)
+✔ reconnect subscribes to the selected tenant and rejects callbacks from retired socket (0.2975ms)
+✔ intentional close cancels reconnect timers and event listeners (0.451417ms)
+✔ connection that never opens is also retried (0.527291ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 47.221334
