@@ -31,7 +31,7 @@ class CloseRequest(StrictModel):
 
 class Envelope(StrictModel):
     protocol_version: Literal[1]
-    type: Literal["round.get", "round.join", "hand.submit", "round.end", "ping"]
+    type: Literal["round.get", "round.join", "hand.submit", "round.compare", "round.end", "ping"]
     request_id: StrictStr = Field(
         min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_-]+$"
     )
@@ -59,6 +59,7 @@ class HandCard(StrictModel):
 
 
 class HandPayload(StrictModel):
+    game_key: StrictStr | None = Field(default=None, min_length=1, max_length=100, pattern=r"^[A-Za-z0-9:_-]+$")
     start_event_id: StrictStr | None = Field(default=None, min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_-]+$")
     cards: list[HandCard] = Field(min_length=13, max_length=13)
 
@@ -76,4 +77,6 @@ def parse_message(value):
     result["payload"] = body.model_dump()
     if envelope.type == "hand.submit" and body.start_event_id is None:
         result["payload"].pop("start_event_id", None)
+    if envelope.type == "hand.submit" and body.game_key is None:
+        result["payload"].pop("game_key", None)
     return result

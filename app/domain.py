@@ -14,7 +14,8 @@ from zoneinfo import ZoneInfo
 RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
 SUITS = ["s", "h", "c", "d"]
 MAX_VERSION = 2147483646
-HISTORY_ROUNDS = 5
+HISTORY_DAYS = 30
+HISTORY_WINDOW_MS = HISTORY_DAYS * 24 * 60 * 60 * 1000
 
 
 def now_ms():
@@ -124,6 +125,13 @@ class Store:
             DROP INDEX IF EXISTS rounds_closed;
             """)
 
+        with closing(sqlite3.connect(self.path)) as db, db:
+            columns = {r[1] for r in db.execute("PRAGMA table_info(rounds)")}
+            if "phase" not in columns:
+                db.execute("ALTER TABLE rounds ADD COLUMN phase TEXT NOT NULL DEFAULT 'playing'")
+            if "game_key" not in columns:
+                db.execute("ALTER TABLE rounds ADD COLUMN game_key TEXT")
+
         # Upgrade before accepting traffic: capture today's aggregate before removing old hands.
         with self.connect(True) as db:
             if not db.execute("SELECT 1 FROM schema_migrations WHERE name='five_round_history'").fetchone():
@@ -135,20 +143,25 @@ class Store:
             for tenant in db.execute("SELECT id FROM tenants").fetchall():
                 self._prune_history(db, tenant[0])
 
+        self._next_history_cleanup = self.clock() + 3_600_000
+
     @staticmethod
     def _day(stamp):
         return datetime.fromtimestamp(stamp / 1000, ZoneInfo("Asia/Shanghai")).date().isoformat()
 
     def _prune_history(self, db, tenant_id):
-        # Count actual closed rounds, not numeric distance: administrators may jump versions.
-        cutoff = db.execute("SELECT version FROM rounds WHERE tenant_id=? AND state='closed' ORDER BY version DESC LIMIT 1 OFFSET ?", (tenant_id, HISTORY_ROUNDS)).fetchone()
-        if cutoff is None:
-            return
-        boundary = (tenant_id, cutoff[0])
-        db.execute("DELETE FROM hands WHERE tenant_id=? AND version<=?", boundary)
-        db.execute("DELETE FROM starts WHERE tenant_id=? AND version<=?", boundary)
-        db.execute("DELETE FROM requests WHERE tenant_id=? AND json_extract(reply,'$.round_version')<=?", boundary)
-        db.execute("DELETE FROM rounds WHERE tenant_id=? AND version<=? AND state='closed'", boundary)
+        # Select exact expired closed versions; never delete a live round or assume
+        # version order equals wall-clock order.
+        versions = db.execute(
+            "SELECT version FROM rounds WHERE tenant_id=? AND state='closed' AND closed_at<?",
+            (tenant_id, self.clock() - HISTORY_WINDOW_MS),
+        ).fetchall()
+        for row in versions:
+            key = (tenant_id, row[0])
+            db.execute("DELETE FROM hands WHERE tenant_id=? AND version=?", key)
+            db.execute("DELETE FROM starts WHERE tenant_id=? AND version=?", key)
+            db.execute("DELETE FROM requests WHERE tenant_id=? AND json_extract(reply,'$.round_version')=?", key)
+            db.execute("DELETE FROM rounds WHERE tenant_id=? AND version=? AND state='closed'", key)
 
     def _record_calculation(self, db, stamp, elapsed):
         day = self._day(stamp)
@@ -297,6 +310,8 @@ class Store:
 
     def expire(self):
         changed = []
+        stamp = self.clock()
+        cleanup = stamp >= self._next_history_cleanup
         with self.connect(True) as db:
             rows = db.execute(
                 "SELECT t.* FROM tenants t JOIN rounds r "
@@ -307,6 +322,12 @@ class Store:
             for t in rows:
                 self._close(db, t, "timeout")
                 changed.append(t["id"])
+            if cleanup:
+                tenants = db.execute("SELECT DISTINCT tenant_id FROM rounds WHERE state='closed' AND closed_at<?", (stamp - HISTORY_WINDOW_MS,)).fetchall()
+                for tenant in tenants:
+                    self._prune_history(db, tenant[0])
+        if cleanup:
+            self._next_history_cleanup = stamp + 3_600_000
         return changed
 
     def register_client(self, tenant_id, client_id):
@@ -432,6 +453,10 @@ class Store:
                 )
                 ack["bound_round_version"] = version
             elif action == "hand.submit":
+                game_key = payload.get("game_key")
+                if game_key:
+                    require(r["game_key"] in (None, game_key), "GAME_ROUND_MISMATCH", "不同房间或游戏局数不能混入本轮")
+                    db.execute("UPDATE rounds SET game_key=? WHERE tenant_id=? AND version=?", (game_key, tenant_id, version))
                 cards = normalize_hand(payload["cards"])
                 event = payload.get("start_event_id")
                 if event:
@@ -524,10 +549,15 @@ class Store:
                             ),
                         )
                         self._record_calculation(db, stamp, elapsed)
+            elif action == "round.compare":
+                require(c["last_bound"] == version, "NOT_JOINED", "仅本轮参与者可报告比牌")
+                db.execute("UPDATE rounds SET phase='comparing' WHERE tenant_id=? AND version=?", (tenant_id, version))
+                ack["phase"] = "comparing"
             elif action == "round.end":
                 require(
                     c["last_bound"] == version, "NOT_JOINED", "仅已绑定设备可报告结束"
                 )
+                ack["phase"] = "ended"
                 ack["next_round_version"] = self._close(db, t, "game_end")
             else:
                 raise DomainError("INVALID_MESSAGE", "未知业务消息", 422)
@@ -605,6 +635,8 @@ class Store:
                 "tenant_id": tenant_id,
                 "round_version": r["version"],
                 "state": r["state"],
+                "phase": "ended" if r["state"] == "closed" else r["phase"],
+                "game_key": r["game_key"],
                 "note": t["note"],
                 "enabled": bool(t["enabled"]),
                 "devices": devices,

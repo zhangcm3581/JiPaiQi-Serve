@@ -158,8 +158,11 @@ class Engine:
             "first_received_at_ms",
             "deadline_at_ms",
             "close_reason",
+            "phase",
+            "game_key",
         ]
         state = {k: d[k] for k in fields}
+        state["capabilities"] = ["round.phase/1", "game_key/1"]
         state["bound_round_version"] = next(
             (
                 c["bound_round_version"]
@@ -172,7 +175,7 @@ class Engine:
             wire("round.state", d["tenant_id"], d["round_version"], state, reply_to)
         )
         participant = next((c for c in d["devices"] if c["client_id"] == peer.client_id and c["cards"]), None)
-        if d["result"] is not None and d["state"] == "ready" and participant:
+        if d["result"] is not None and d["state"] == "ready" and participant and d["phase"] == "playing":
             peer.offer(
                 wire(
                     "round.result",
@@ -544,6 +547,12 @@ def create_app(db_path=None):
                         else:
                             reply = await e.db("process", tenant_id, client_id, message)
                             peer.offer(reply)
+                            if message["type"] in ("round.compare", "round.end"):
+                                notification = wire("round.phase", tenant_id, message["round_version"],
+                                                    {"phase": reply["payload"].get("phase", "ended" if message["type"] == "round.end" else "comparing"), "source_client_id": client_id})
+                                for recipient in list(e.clients.values()):
+                                    if recipient.tenant_id == tenant_id:
+                                        recipient.offer(notification)
                             await e.publish([tenant_id])
                 except (ValueError, ValidationError, DomainError) as ex:
                     code = getattr(ex, "code", "INVALID_MESSAGE")
