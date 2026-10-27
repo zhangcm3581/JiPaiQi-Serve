@@ -160,9 +160,10 @@ class Engine:
             "close_reason",
             "phase",
             "game_key",
+            "mode",
         ]
         state = {k: d[k] for k in fields}
-        state["capabilities"] = ["round.phase/1", "game_key/1"]
+        state["capabilities"] = ["round.phase/1", "game_key/1", "deck.mode/1", "deck.two-jokers/1"]
         state["bound_round_version"] = next(
             (
                 c["bound_round_version"]
@@ -181,7 +182,7 @@ class Engine:
                     "round.result",
                     d["tenant_id"],
                     d["round_version"],
-                    {"remaining_count": 13, "cards": d["result"], "client_id": peer.client_id, "start_event_id": participant["start_event_id"]},
+                    {"remaining_count": 13, "mode": d["mode"], "cards": d["result"], "client_id": peer.client_id, "start_event_id": participant["start_event_id"]},
                 )
             )
 

@@ -54,11 +54,12 @@ class JoinPayload(StrictModel):
 
 
 class HandCard(StrictModel):
-    rank: Literal["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
-    suit: Literal["s", "h", "c", "d"]
+    rank: Literal["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "small", "big"]
+    suit: Literal["s", "h", "c", "d", "j"]
 
 
 class HandPayload(StrictModel):
+    mode: Literal["standard", "two_jokers", "six_jokers"] = "standard"
     game_key: StrictStr | None = Field(default=None, min_length=1, max_length=100, pattern=r"^[A-Za-z0-9:_-]+$")
     start_event_id: StrictStr | None = Field(default=None, min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_-]+$")
     cards: list[HandCard] = Field(min_length=13, max_length=13)
@@ -75,6 +76,8 @@ def parse_message(value):
     body = PAYLOADS.get(envelope.type, EmptyPayload).model_validate(envelope.payload)
     result = envelope.model_dump()
     result["payload"] = body.model_dump()
+    if envelope.type == "hand.submit" and "mode" not in envelope.payload:
+        result["payload"].pop("mode", None)
     if envelope.type == "hand.submit" and body.start_event_id is None:
         result["payload"].pop("start_event_id", None)
     if envelope.type == "hand.submit" and body.game_key is None:

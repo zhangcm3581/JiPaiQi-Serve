@@ -37,6 +37,10 @@ export const dateTime = (value) =>
         timeZone: "Asia/Shanghai",
       });
 export function renderCard(card) {
+  if(card.suit === "j") {
+    const big=card.rank === "big";
+    return `<span class="card ${big ? "red" : ""}" title="${big ? "大王" : "小王"}"><span class="rank">${big ? "大" : "小"}</span><span class="suit">王</span></span>`;
+  }
   return `<span class="card ${["h", "d"].includes(card.suit) ? "red" : ""}" title="${escapeHtml(suits[card.suit] + card.rank)}"><span class="rank">${escapeHtml(card.rank)}</span><span class="suit">${suits[card.suit] || ""}</span></span>`;
 }
 export function renderHands(round, live = true, connected = true) {
@@ -72,11 +76,11 @@ export function renderHands(round, live = true, connected = true) {
     })
     .join("");
 }
-export function renderResultGrid(result, footer = "等待手牌收齐") {
+export function renderResultGrid(result, footer = "等待手牌收齐", mode = "standard") {
   const counts = new Map(
     (result || []).map((c) => [c.suit + ":" + c.rank, c.count]),
   );
-  const cells = ["s", "s", "h", "h", "c", "c", "d", "d"]
+  let cells = ["s", "s", "h", "h", "c", "c", "d", "d"]
     .map(
       (suit, row) =>
         `<div class="client-cell suit-cell ${["h", "d"].includes(suit) ? "red" : ""}">${suits[suit]}</div>` +
@@ -88,8 +92,16 @@ export function renderResultGrid(result, footer = "等待手牌收齐") {
           .join(""),
     )
     .join("");
+  if(mode === "six_jokers" || mode === "two_jokers") {
+    cells += '<div class="client-cell suit-cell">王</div>';
+    for(let x=0;x<13;x++) {
+      const big=x<3, rank=big?"big":"small";
+      const filled=x<6 && (counts.get("j:"+rank)||0)>x%3;
+      cells += `<div class="client-cell ${big?"red ":""}${filled?"filled":""}">${filled?(big?"大":"小"):""}</div>`;
+    }
+  }
   const accessible = result
-    ? result.map((c) => `${suits[c.suit]}${c.rank} ${c.count}张`).join("，")
+    ? result.map((c) => `${c.suit === "j" ? (c.rank === "big" ? "大王" : "小王") : suits[c.suit]+c.rank} ${c.count}张`).join("，")
     : footer;
   return `<div class="client-grid" role="img" aria-label="${escapeHtml(accessible)}">${cells}</div><div class="client-grid-footer">${escapeHtml(footer)}</div>`;
 }

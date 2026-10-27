@@ -56,26 +56,31 @@ def identifier(value, tenant=False):
     )
 
 
-def normalize_hand(cards):
-    require(
-        isinstance(cards, list) and len(cards) == 13,
-        "INVALID_MESSAGE",
-        "必须上传13张完整手牌",
-        422,
-    )
+def deck_for(mode="standard"):
+    require(mode in ("standard", "two_jokers", "six_jokers"), "INVALID_MODE", "未知玩法模式", 422)
+    deck = {(s, r): 2 for s in SUITS for r in RANKS}
+    if mode in ("two_jokers", "six_jokers"):
+        for rank in (("2", "3") if mode == "two_jokers" else ("2", "3", "4", "5", "6", "7")):
+            deck[("s", rank)] = 1
+        deck[("j", "small")] = 1 if mode == "two_jokers" else 3
+        deck[("j", "big")] = 1 if mode == "two_jokers" else 3
+    return deck
+
+
+def normalize_hand(cards, mode="standard"):
+    deck = deck_for(mode)
+    require(isinstance(cards, list) and len(cards) == 13,
+            "INVALID_MESSAGE", "必须上传13张完整手牌", 422)
     for card in cards:
-        require(
-            isinstance(card, dict)
-            and set(card) == {"rank", "suit"}
-            and card["rank"] in RANKS
-            and card["suit"] in SUITS,
-            "INVALID_MESSAGE",
-            "牌面仅接受合法rank和suit",
-            422,
-        )
+        require(isinstance(card, dict) and set(card) == {"rank", "suit"}
+                and isinstance(card["rank"], str) and isinstance(card["suit"], str)
+                and (card["suit"], card["rank"]) in deck,
+                "INVALID_MESSAGE", "牌面不符合所选模式", 422)
     counts = Counter((c["suit"], c["rank"]) for c in cards)
-    require(max(counts.values()) <= 2, "DECK_OVERFLOW", "同花色同点数超过两张")
-    return sorted(cards, key=lambda c: (SUITS.index(c["suit"]), RANKS.index(c["rank"])))
+    require(all(n <= deck[k] for k, n in counts.items()),
+            "DECK_OVERFLOW", "手牌数量超过所选模式牌库")
+    order = {key: i for i, key in enumerate(deck)}
+    return sorted(cards, key=lambda c: order[(c["suit"], c["rank"])])
 
 
 class Store:
@@ -127,6 +132,9 @@ class Store:
 
         with closing(sqlite3.connect(self.path)) as db, db:
             columns = {r[1] for r in db.execute("PRAGMA table_info(rounds)")}
+            if "mode" not in columns:
+                db.execute("ALTER TABLE rounds ADD COLUMN mode TEXT")
+                db.execute("UPDATE rounds SET mode='standard' WHERE EXISTS (SELECT 1 FROM hands WHERE hands.tenant_id=rounds.tenant_id AND hands.version=rounds.version)")
             if "phase" not in columns:
                 db.execute("ALTER TABLE rounds ADD COLUMN phase TEXT NOT NULL DEFAULT 'playing'")
             if "game_key" not in columns:
@@ -457,7 +465,11 @@ class Store:
                 if game_key:
                     require(r["game_key"] in (None, game_key), "GAME_ROUND_MISMATCH", "不同房间或游戏局数不能混入本轮")
                     db.execute("UPDATE rounds SET game_key=? WHERE tenant_id=? AND version=?", (game_key, tenant_id, version))
-                cards = normalize_hand(payload["cards"])
+                mode = payload.get("mode", "standard")
+                cards = normalize_hand(payload["cards"], mode)
+                require(r["mode"] in (None, mode), "MODE_MISMATCH", "本轮模式不同，请所有客户端选择同一模式")
+                db.execute("UPDATE rounds SET mode=? WHERE tenant_id=? AND version=?", (mode, tenant_id, version))
+                deck = deck_for(mode)
                 event = payload.get("start_event_id")
                 if event:
                     start_fp = encode({"version": version, "action": action, "cards": cards})
@@ -504,9 +516,9 @@ class Store:
                         for c in hand
                     )
                     require(
-                        all(v <= 2 for v in counts.values()),
+                        all(v <= deck.get(k, 0) for k, v in counts.items()),
                         "DECK_OVERFLOW",
-                        "累计同花色同点数超过两张",
+                        "累计手牌超过所选模式牌库",
                     )
                     require(len(all_hands) < 7, "ROUND_READY", "已收齐7份")
                     stamp = self.clock()
@@ -526,10 +538,9 @@ class Store:
                         )
                     if len(all_hands) == 6:
                         result = [
-                            {"suit": s, "rank": rank, "count": 2 - counts[(s, rank)]}
-                            for s in SUITS
-                            for rank in RANKS
-                            if counts[(s, rank)] < 2
+                            {"suit": s, "rank": rank, "count": limit - counts[(s, rank)]}
+                            for (s, rank), limit in deck.items()
+                            if counts[(s, rank)] < limit
                         ]
                         require(
                             sum(c["count"] for c in result) == 13,
@@ -637,6 +648,7 @@ class Store:
                 "state": r["state"],
                 "phase": "ended" if r["state"] == "closed" else r["phase"],
                 "game_key": r["game_key"],
+                "mode": r["mode"],
                 "note": t["note"],
                 "enabled": bool(t["enabled"]),
                 "devices": devices,
